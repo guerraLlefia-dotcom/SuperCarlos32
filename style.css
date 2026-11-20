@@ -1,0 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Nunito:wght@500;700;800;900&display=swap');
+
+:root {
+  color-scheme: dark;
+  --ink: #142b55;
+  --panel: #173b70;
+  --gold: #ffd76a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: 24px;
+  color: #fff;
+  font-family: 'Nunito', system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse at 50% 0%, #286db2 0%, transparent 55%),
+    linear-gradient(160deg, #102d58, #071a37 70%);
+}
+
+.game-shell { width: min(1180px, 100%); margin: 0 auto; }
+
+.game-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 0 0 18px;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: var(--gold);
+  font: 10px 'Press Start 2P', monospace;
+  letter-spacing: 1px;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(24px, 4vw, 42px);
+  line-height: 1.12;
+  text-shadow: 3px 4px 0 #102b55;
+}
+
+.subtitle { margin: 9px 0 0; color: #d7eaff; }
+
+.controls-card {
+  display: grid;
+  gap: 9px;
+  flex: 0 0 auto;
+  padding: 12px 15px;
+  border: 2px solid #5c91cb;
+  border-radius: 12px;
+  background: #14345f;
+  box-shadow: 0 5px 0 #0a2042;
+  color: #e8f4ff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.controls-card span { display: flex; align-items: center; gap: 5px; }
+
+kbd {
+  display: inline-grid;
+  min-width: 23px;
+  height: 23px;
+  place-items: center;
+  padding: 0 5px;
+  border: 1px solid #b9d9f7;
+  border-radius: 5px;
+  background: #e8f4ff;
+  color: #18385e;
+  font: 700 12px 'Nunito', sans-serif;
+  box-shadow: 0 2px 0 #8bb5df;
+}
+
+.game-frame {
+  position: relative;
+  overflow: hidden;
+  border: 5px solid #8bc9ff;
+  border-radius: 14px;
+  background: #2699f5;
+  box-shadow: 0 9px 0 #071a37, 0 18px 35px #0007;
+  line-height: 0;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: #238fe9;
+  font: 12px 'Press Start 2P', monospace;
+  line-height: 1.8;
+}
+
+.loading.hidden { display: none; }
+
+.game-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 4px 0;
+  color: #e5f3ff;
+  font-weight: 800;
+}
+
+#status { color: var(--gold); }
+.hint { color: #b9d8f5; text-align: right; }
+
+@media (max-width: 760px) {
+  body { padding: 12px; }
+  .game-header { align-items: start; flex-direction: column; }
+  .controls-card { display: flex; flex-wrap: wrap; }
+  .game-footer { flex-direction: column; }
+  .hint { text-align: left; }
+}

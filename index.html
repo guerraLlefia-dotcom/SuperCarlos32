@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SuperCarlos32 - Búsqueda del tesoro</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="game-shell">
+    <header class="game-header">
+      <div>
+        <p class="eyebrow">SUPER CARLOS 32</p>
+        <h1>La búsqueda del tesoro</h1>
+        <p class="subtitle">Explora las islas, salta entre desniveles y descubre el escenario.</p>
+      </div>
+      <div class="controls-card">
+        <span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> Moverse</span>
+        <span><kbd>Espacio</kbd> Saltar</span>
+      </div>
+    </header>
+
+    <section class="game-frame" aria-label="Escenario del juego">
+      <canvas id="game" width="1536" height="1024" aria-label="Mapa jugable"></canvas>
+      <div id="loading" class="loading">Cargando la isla...</div>
+    </section>
+    <footer class="game-footer">
+      <span id="status">¡Explora la isla!</span>
+      <span class="hint">Consejo: puedes saltar para subir a las plataformas de piedra.</span>
+    </footer>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
