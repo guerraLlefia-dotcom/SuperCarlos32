@@ -10,6 +10,7 @@
   const loading = document.getElementById("loading");
 
   const map = new Image();
+  let currentStage = 1;
   map.src = "images/stages/stage%201.png";
 
   const spriteSheet = new Image();
@@ -76,6 +77,8 @@
   let playerHealth = 3;
   let damageCooldown = 0;
   let victory = false;
+  let victoryTimer = 0;
+  let stageTransitioning = false;
   let spritesReady = false;
 
   function setStatus(message) {
@@ -128,6 +131,19 @@
     }
   }
 
+  function beginStageVictory() {
+    if (victory) return;
+    victory = true;
+    victoryTimer = 0;
+    player.moving = false;
+    player.attacking = false;
+    player.frame = 0;
+    player.frameTimer = 0;
+    // Todos los enemigos activos ejecutan su animación de derrota.
+    startMonkeyDefeat();
+    setStatus("¡Nivel " + currentStage + " completado!");
+  }
+
   function updateCoinsAndGoal(dt) {
     for (const coin of coins) {
       if (coin.animation) coin.animation.update(dt);
@@ -140,10 +156,7 @@
     }
     goal.animation?.update(dt);
     if (!victory && Math.hypot(player.x - goal.x, player.y - goal.y) < 58) {
-      victory = true;
-      player.moving = false;
-      player.attacking = false;
-      setStatus("¡Has encontrado la estrella! ¡Nivel completado!");
+      beginStageVictory();
     }
   }
 
@@ -216,11 +229,11 @@
   function drawWorldObjects() {
     if (!spritesReady) return;
     for (const coin of coins) {
-      if (!coin.collected) coin.animation.draw(ctx, coin.x - 58, coin.y - 58, 116, 116);
+      if (!coin.collected) coin.animation.draw(ctx, coin.x - 41, coin.y - 41, 82, 82);
     }
-    goal.animation.draw(ctx, goal.x - 76, goal.y - 76, 152, 152);
+    goal.animation.draw(ctx, goal.x - 53, goal.y - 53, 106, 106);
     if (monkey.state !== "defeated" || !monkey.animation.isFinished) {
-      monkey.animation.draw(ctx, monkey.x - 68, monkey.y - 82, 136, 146, {
+      monkey.animation.draw(ctx, monkey.x - 61, monkey.y - 74, 122, 131, {
         flipX: monkey.flipX
       });
     }
@@ -464,8 +477,8 @@
   function drawPlayer() {
     if (!spriteReady) return;
 
-    const row = player.attacking ? SHEET.attackRow :
-      (player.moving ? SHEET.runRow : SHEET.idleRow);
+    const row = victory ? SHEET.celebrateRow : (player.attacking ? SHEET.attackRow :
+      (player.moving ? SHEET.runRow : SHEET.idleRow));
     const column = getFrameColumn();
     const frame = spriteFrames[row * SHEET.columns + column];
     if (!frame) return;
@@ -511,7 +524,17 @@
   }
 
   function update(dt) {
-    if (victory) return;
+    if (victory) {
+      victoryTimer += dt;
+      player.frameTimer += dt;
+      if (player.frameTimer >= 0.18) {
+        player.frame = (player.frame + 1) % 3;
+        player.frameTimer -= 0.18;
+      }
+      monkey.animation?.update(dt);
+      if (victoryTimer >= 1.65 && !stageTransitioning) advanceStage();
+      return;
+    }
     damageCooldown = Math.max(0, damageCooldown - dt);
     player.attackCooldown = Math.max(0, player.attackCooldown - dt);
 
@@ -573,6 +596,56 @@
 
     updateCoinsAndGoal(dt);
     updateMonkey(dt);
+  }
+
+  function advanceStage() {
+    stageTransitioning = true;
+    if (currentStage >= 6) {
+      setStatus("¡Has completado todos los stages disponibles!");
+      return;
+    }
+
+    currentStage++;
+    mapReady = false;
+    loading.textContent = "Cargando stage " + currentStage + "...";
+    loading.classList.remove("hidden");
+    map.onload = () => {
+      mapReady = true;
+      player.x = 420;
+      player.y = 420;
+      player.direction = "front";
+      player.frame = 0;
+      player.frameTimer = 0;
+      playerHealth = 3;
+      collectedCoins = 0;
+      coins.forEach(coin => { coin.collected = false; });
+      goal.x = LEVEL.goalPosition[0];
+      goal.y = LEVEL.goalPosition[1];
+      monkey.x = LEVEL.monkeyPatrol.x;
+      monkey.y = LEVEL.monkeyPatrol.y;
+      monkey.homeX = LEVEL.monkeyPatrol.x;
+      monkey.homeY = LEVEL.monkeyPatrol.y;
+      monkey.angle = 0;
+      monkey.state = "patrol";
+      monkey.direction = "front";
+      monkey.flipX = false;
+      monkey.attackHit = false;
+      monkey.hitPlayerCooldown = 0;
+      monkey.animation.setAnimation("walkFront", true);
+      victory = false;
+      victoryTimer = 0;
+      stageTransitioning = false;
+      // Los límites y la distribución de objetos de los siguientes mapas
+      // se definirán durante el diseño específico de cada stage.
+      loading.classList.add("hidden");
+      setStatus("Stage " + currentStage + " — ¡explora el nuevo mapa!");
+    };
+    map.onerror = () => {
+      loading.textContent = "No se pudo cargar el stage " + currentStage + ".";
+      setStatus("Error al cargar el siguiente stage.");
+      stageTransitioning = false;
+    };
+    map.src = "images/stages/stage%20" + currentStage + ".png";
   }
 
   function render() {
