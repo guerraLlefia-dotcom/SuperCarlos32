@@ -69,12 +69,12 @@
   const keys = new Set();
   const directionColumns = { front: 0, side: 3, back: 6 };
 
-  const coins = LEVEL.coinPositions.map(([x,y]) => ({x,y,collected:false,animation:null,radius:25}));
+  const coins = LEVEL.coinPositions.map(([x,y]) => ({x,y,collected:false,animation:null,radius:25,dropped:false}));
   const goal = {x:LEVEL.goalPosition[0],y:LEVEL.goalPosition[1],animation:null,radius:38};
   const monkeys = LEVEL.monkeys.map((p,index) => ({
     id:index,x:p.x,y:p.y,homeX:p.x,homeY:p.y,patrolRadius:p.radius,angle:index*1.7,
     state:"patrol",direction:"front",flipX:false,speed:122,detectRadius:255,contactRadius:39,
-    animation:null,hitPlayerCooldown:0,attackHit:false,defeatedTimer:0
+    animation:null,hitPlayerCooldown:0,attackHit:false,defeatedTimer:0,coinDropped:false
   }));
   let collectedCoins = 0;
   let playerHealth = 3;
@@ -83,6 +83,9 @@
   let gameOver = false;
   let victoryTimer = 0;
   let stageTransitioning = false;
+  let stageIntroTimer = 0;
+  let stageOutroTimer = 0;
+  let transitionPhase = "none";
   let spritesReady = false;
 
   function setStatus(message) {
@@ -114,7 +117,12 @@
     monkey.state = "defeated";
     monkey.animation.setAnimation(enemyDefeatAnimation(monkey), true);
     monkey.defeatedTimer = 0;
-    setStatus("¡Has derrotado al mono!");
+    if (!monkey.coinDropped) {
+      monkey.coinDropped = true;
+      coins.push({ x: monkey.x, y: monkey.y - 12, collected: false, dropped: true,
+        animation: GameSprites.create("coin", "spin"), radius: 25 });
+    }
+    setStatus("¡Has derrotado al mono! Ha soltado una moneda.");
   }
 
   function attackHitsMonkey() {
@@ -156,6 +164,10 @@
     if (victory) return;
     victory = true;
     victoryTimer = 0;
+    transitionPhase = "outro";
+    stageOutroTimer = 0;
+    player.direction = "front";
+    player.facingLeft = false;
     player.moving = false;
     player.attacking = false;
     player.frame = 0;
@@ -464,7 +476,7 @@
       (player.damageTimer > 0 ? SHEET.damageRow :
         (player.attacking ? SHEET.attackRow :
           (player.moving ? SHEET.runRow : SHEET.idleRow)));
-    const column = getFrameColumn();
+    const column = victory ? (player.frame % 3) : getFrameColumn();
     const frame = spriteFrames[row * SHEET.columns + column];
     if (!frame) return;
 
@@ -510,15 +522,22 @@
 
   function update(dt) {
     if (gameOver) return;
+    if (stageIntroTimer > 0) {
+      coins.forEach(coin => coin.animation?.update(dt));
+      goal.animation?.update(dt);
+      monkeys.forEach(monkey => monkey.animation?.update(dt));
+      return;
+    }
     if (victory) {
       victoryTimer += dt;
+      stageOutroTimer += dt;
       player.frameTimer += dt;
       if (player.frameTimer >= 0.18) {
         player.frame = (player.frame + 1) % 3;
         player.frameTimer -= 0.18;
       }
       monkeys.forEach(monkey => monkey.animation?.update(dt));
-      if (victoryTimer >= 1.65 && !stageTransitioning) advanceStage();
+      if (stageOutroTimer >= 2.15 && !stageTransitioning) advanceStage();
       return;
     }
     damageCooldown = Math.max(0, damageCooldown - dt);
@@ -615,8 +634,8 @@
     loading.classList.remove("hidden");
     map.onload = () => {
       mapReady = true;
-      player.x = 420;
-      player.y = 420;
+      player.x = LEVEL.playerStart[0];
+      player.y = LEVEL.playerStart[1];
       player.direction = "front";
       player.frame = 0;
       player.frameTimer = 0;
@@ -626,17 +645,22 @@
       player.knockbackX = 0;
       player.knockbackY = 0;
       collectedCoins = 0;
-      coins.forEach(coin => { coin.collected = false; });
+      coins.splice(0, coins.length, ...LEVEL.coinPositions.map(([x,y]) => ({
+        x, y, collected: false, animation: GameSprites.create("coin", "spin"), radius: 25, dropped: false
+      })));
       goal.x = LEVEL.goalPosition[0];
       goal.y = LEVEL.goalPosition[1];
       monkeys.forEach(monkey => {
         monkey.x=monkey.homeX; monkey.y=monkey.homeY; monkey.angle=0;
         monkey.state="patrol"; monkey.direction="front"; monkey.flipX=false;
-        monkey.attackHit=false; monkey.hitPlayerCooldown=0;
+        monkey.attackHit=false; monkey.hitPlayerCooldown=0; monkey.coinDropped=false;
         monkey.animation.setAnimation("walkFront",true);
       });
       victory = false;
       victoryTimer = 0;
+      transitionPhase = "intro";
+      stageIntroTimer = 1.8;
+      stageOutroTimer = 0;
       stageTransitioning = false;
       // Los límites y la distribución de objetos de los siguientes mapas
       // se definirán durante el diseño específico de cada stage.
@@ -659,6 +683,29 @@
     drawWorldObjects();
     drawPlayer();
     drawHud();
+    if (transitionPhase === "outro" && victory) {
+      const alpha = Math.min(0.82, stageOutroTimer / 1.1 * 0.82);
+      ctx.save();
+      ctx.fillStyle = "rgba(8, 20, 42, " + alpha + ")";
+      ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+      ctx.globalAlpha = Math.min(1, stageOutroTimer / 0.35);
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#ffe08a";
+      ctx.font = "bold 64px Nunito, sans-serif";
+      ctx.fillText("¡STAGE " + currentStage + " COMPLETADO!", WORLD.width / 2, WORLD.height / 2);
+      ctx.restore();
+    } else if (stageIntroTimer > 0) {
+      const elapsed = 1.8 - stageIntroTimer;
+      const alpha = Math.min(1, elapsed / 0.35, stageIntroTimer / 0.35);
+      ctx.save();
+      ctx.fillStyle = "rgba(8, 20, 42, " + (0.78 * alpha) + ")";
+      ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+      ctx.globalAlpha = alpha; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = "#ffe08a"; ctx.font = "bold 66px Nunito, sans-serif";
+      ctx.fillText("STAGE " + currentStage, WORLD.width / 2, WORLD.height / 2 - 12);
+      ctx.fillStyle = "#ffffff"; ctx.font = "bold 27px Nunito, sans-serif";
+      ctx.fillText("¡Prepárate para explorar!", WORLD.width / 2, WORLD.height / 2 + 55);
+      ctx.restore();
+    }
     if (gameOver) {
       ctx.save();
       ctx.fillStyle = "rgba(12, 20, 35, 0.72)";
