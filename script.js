@@ -47,6 +47,194 @@
   const keys = new Set();
   const directionColumns = { front: 0, side: 3, back: 6 };
 
+  // Objetos y enemigos del primer nivel.
+  const LEVEL = {
+    coinPositions: [
+      [230, 245], [520, 190], [675, 345], [300, 555],
+      [570, 665], [1160, 245], [1450, 310], [1550, 620]
+    ],
+    goalPosition: [1515, 490],
+    monkeyPatrol: { x: 590, y: 475, radius: 72 }
+  };
+  const coins = LEVEL.coinPositions.map(([x, y]) => ({
+    x, y, collected: false, animation: null, radius: 25
+  }));
+  const goal = {
+    x: LEVEL.goalPosition[0], y: LEVEL.goalPosition[1],
+    animation: null, radius: 38
+  };
+  const monkey = {
+    x: LEVEL.monkeyPatrol.x, y: LEVEL.monkeyPatrol.y,
+    homeX: LEVEL.monkeyPatrol.x, homeY: LEVEL.monkeyPatrol.y,
+    patrolRadius: LEVEL.monkeyPatrol.radius, angle: 0,
+    state: "patrol", direction: "front", flipX: false,
+    speed: 122, detectRadius: 255, contactRadius: 43,
+    animation: null, hitPlayerCooldown: 0, attackHit: false,
+    defeatedTimer: 0
+  };
+  let collectedCoins = 0;
+  let playerHealth = 3;
+  let damageCooldown = 0;
+  let victory = false;
+  let spritesReady = false;
+
+  function setStatus(message) {
+    status.textContent = message;
+  }
+
+  function updateEnemyFacing(dx, dy) {
+    if (Math.abs(dx) > Math.abs(dy)) {
+      monkey.direction = "side";
+      monkey.flipX = dx < 0;
+    } else {
+      monkey.direction = dy < 0 ? "back" : "front";
+      monkey.flipX = false;
+    }
+  }
+
+  function enemyWalkAnimation() {
+    return monkey.direction === "side" ? "walkSide" :
+      monkey.direction === "back" ? "walkBack" : "walkFront";
+  }
+
+  function enemyDefeatAnimation() {
+    return monkey.direction === "side" ? "defeatedSide" :
+      monkey.direction === "back" ? "defeatedBack" : "defeatedFront";
+  }
+
+  function startMonkeyDefeat() {
+    if (monkey.state === "defeated") return;
+    monkey.state = "defeated";
+    monkey.animation.setAnimation(enemyDefeatAnimation(), true);
+    monkey.defeatedTimer = 0;
+    setStatus("¡Has derrotado al mono!");
+  }
+
+  function attackHitsMonkey() {
+    if (!player.attacking || monkey.state === "defeated" || monkey.attackHit) return;
+    const dx = monkey.x - player.x;
+    const dy = monkey.y - player.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance > 112) return;
+
+    let inFront = false;
+    if (player.direction === "front") inFront = dy >= -12 && Math.abs(dx) < 82;
+    else if (player.direction === "back") inFront = dy <= 12 && Math.abs(dx) < 82;
+    else inFront = player.facingLeft ? dx <= 15 : dx >= -15;
+
+    if (inFront) {
+      monkey.attackHit = true;
+      startMonkeyDefeat();
+    }
+  }
+
+  function updateCoinsAndGoal(dt) {
+    for (const coin of coins) {
+      if (coin.animation) coin.animation.update(dt);
+      if (coin.collected) continue;
+      if (Math.hypot(player.x - coin.x, player.y - coin.y) < 43) {
+        coin.collected = true;
+        collectedCoins++;
+        setStatus("Monedas: " + collectedCoins + " / " + coins.length);
+      }
+    }
+    goal.animation?.update(dt);
+    if (!victory && Math.hypot(player.x - goal.x, player.y - goal.y) < 58) {
+      victory = true;
+      player.moving = false;
+      player.attacking = false;
+      setStatus("¡Has encontrado la estrella! ¡Nivel completado!");
+    }
+  }
+
+  function updateMonkey(dt) {
+    monkey.animation?.update(dt);
+    if (monkey.state === "defeated") {
+      monkey.defeatedTimer += dt;
+      return;
+    }
+
+    monkey.hitPlayerCooldown = Math.max(0, monkey.hitPlayerCooldown - dt);
+    const dxToPlayer = player.x - monkey.x;
+    const dyToPlayer = player.y - monkey.y;
+    const distanceToPlayer = Math.hypot(dxToPlayer, dyToPlayer);
+
+    if (monkey.state === "patrol" && distanceToPlayer < monkey.detectRadius) {
+      monkey.state = "chase";
+      setStatus("¡El mono te ha visto!");
+    }
+
+    if (monkey.state === "patrol") {
+      monkey.angle += dt * 1.05;
+      const targetX = monkey.homeX + Math.cos(monkey.angle) * monkey.patrolRadius;
+      const targetY = monkey.homeY + Math.sin(monkey.angle) * monkey.patrolRadius;
+      const dx = targetX - monkey.x;
+      const dy = targetY - monkey.y;
+      const length = Math.hypot(dx, dy) || 1;
+      const step = Math.min(length, monkey.speed * 0.72 * dt);
+      monkey.x += dx / length * step;
+      monkey.y += dy / length * step;
+      updateEnemyFacing(dx, dy);
+    } else if (monkey.state === "chase" && distanceToPlayer > 1) {
+      const dx = dxToPlayer / distanceToPlayer;
+      const dy = dyToPlayer / distanceToPlayer;
+      const nextX = monkey.x + dx * monkey.speed * dt;
+      const nextY = monkey.y + dy * monkey.speed * dt;
+      if (canStandAt(nextX, monkey.y)) monkey.x = nextX;
+      if (canStandAt(monkey.x, nextY)) monkey.y = nextY;
+      updateEnemyFacing(dx, dy);
+    }
+
+    const currentDistance = Math.hypot(player.x - monkey.x, player.y - monkey.y);
+    if (currentDistance < monkey.contactRadius && monkey.hitPlayerCooldown <= 0 &&
+        damageCooldown <= 0 && !victory) {
+      playerHealth = Math.max(0, playerHealth - 1);
+      damageCooldown = 1.25;
+      monkey.hitPlayerCooldown = 1.25;
+      player.frame = 0;
+      player.frameTimer = 0;
+      setStatus(playerHealth > 0
+        ? "¡El mono te ha golpeado! Vidas: " + playerHealth
+        : "¡Te has quedado sin vidas! Recarga el nivel para intentarlo de nuevo.");
+      if (playerHealth <= 0) {
+        victory = true;
+        player.moving = false;
+        player.attacking = false;
+      }
+    }
+
+    attackHitsMonkey();
+  }
+
+  function drawWorldObjects() {
+    if (!spritesReady) return;
+    for (const coin of coins) {
+      if (!coin.collected) coin.animation.draw(ctx, coin.x - 34, coin.y - 34, 68, 68);
+    }
+    goal.animation.draw(ctx, goal.x - 48, goal.y - 48, 96, 96);
+    if (monkey.state !== "defeated" || !monkey.animation.isFinished) {
+      monkey.animation.draw(ctx, monkey.x - 52, monkey.y - 65, 104, 112, {
+        flipX: monkey.flipX
+      });
+    }
+  }
+
+  function drawHud() {
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = "rgba(10, 35, 65, 0.82)";
+    ctx.fillRect(22, 20, 270, 54);
+    ctx.strokeStyle = "#ffe08a";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(22, 20, 270, 54);
+    ctx.fillStyle = "#fff4cf";
+    ctx.font = "bold 25px Nunito, sans-serif";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Monedas: " + collectedCoins + "/" + coins.length, 38, 47);
+    ctx.fillText("Vidas: " + "♥".repeat(playerHealth) + "♡".repeat(3 - playerHealth), 38, 96);
+    ctx.restore();
+  }
+
   // Límites interiores de las zonas de hierba. El puente conecta ambas
   // islas; el agua y los bordes rocosos quedan fuera de estas áreas.
   const walkableAreas = [
@@ -316,6 +504,8 @@
   }
 
   function update(dt) {
+    if (victory) return;
+    damageCooldown = Math.max(0, damageCooldown - dt);
     player.attackCooldown = Math.max(0, player.attackCooldown - dt);
 
     if (player.attacking) {
@@ -373,6 +563,9 @@
       player.frame = 0;
       player.frameTimer = 0;
     }
+
+    updateCoinsAndGoal(dt);
+    updateMonkey(dt);
   }
 
   function render() {
@@ -380,7 +573,9 @@
     ctx.clearRect(0, 0, WORLD.width, WORLD.height);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(map, 0, 0, WORLD.width, WORLD.height);
+    drawWorldObjects();
     drawPlayer();
+    drawHud();
   }
 
   function loop(timestamp) {
@@ -397,7 +592,7 @@
       event.preventDefault();
     }
 
-    if (!keys.has(key) && (key === "Space" || key === "KeyX")) {
+    if (!keys.has(key) && (key === "Space" || key === "KeyX") && !victory) {
       startAttack();
     }
     keys.add(key);
@@ -408,15 +603,33 @@
 
   map.onload = () => {
     mapReady = true;
+    tryStartGame();
+  };
+
+
+  function tryStartGame() {
+    if (!mapReady || !spriteReady || !spritesReady || window.__gameLoopStarted) return;
+    window.__gameLoopStarted = true;
     loading.classList.add("hidden");
     requestAnimationFrame(loop);
-  };
+  }
+
+  GameSprites.ready.then(() => {
+    coins.forEach(coin => { coin.animation = GameSprites.create("coin", "spin"); });
+    goal.animation = GameSprites.create("star", "idle");
+    monkey.animation = GameSprites.create("monkey", "walkFront");
+    spritesReady = true;
+    tryStartGame();
+  }).catch(error => {
+    console.error(error);
+    loading.textContent = "No se pudieron cargar las animaciones del nivel.";
+  });
 
   map.onerror = () => {
     loading.textContent = "No se pudo cargar images/stages/stage 1.png";
   };
 
-  spriteSheet.onload = () => { prepareSpriteFrames(); spriteReady = true; };
+  spriteSheet.onload = () => { prepareSpriteFrames(); spriteReady = true; tryStartGame(); };
   spriteSheet.onerror = () => {
     status.textContent = "No se pudo cargar el sprite del jugador.";
   };
