@@ -216,11 +216,11 @@
   function drawWorldObjects() {
     if (!spritesReady) return;
     for (const coin of coins) {
-      if (!coin.collected) coin.animation.draw(ctx, coin.x - 34, coin.y - 34, 68, 68);
+      if (!coin.collected) coin.animation.draw(ctx, coin.x - 58, coin.y - 58, 116, 116);
     }
-    goal.animation.draw(ctx, goal.x - 48, goal.y - 48, 96, 96);
+    goal.animation.draw(ctx, goal.x - 76, goal.y - 76, 152, 152);
     if (monkey.state !== "defeated" || !monkey.animation.isFinished) {
-      monkey.animation.draw(ctx, monkey.x - 52, monkey.y - 65, 104, 112, {
+      monkey.animation.draw(ctx, monkey.x - 68, monkey.y - 82, 136, 146, {
         flipX: monkey.flipX
       });
     }
