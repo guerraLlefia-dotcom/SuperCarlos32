@@ -12,21 +12,23 @@
       <div>
         <p class="eyebrow">SUPER CARLOS 32</p>
         <h1>La búsqueda del tesoro</h1>
-        <p class="subtitle">Explora las islas, salta entre desniveles y descubre el escenario.</p>
+        <p class="subtitle">Explora las islas y utiliza tu martillo para abrirte camino.</p>
       </div>
-      <div class="controls-card">
+      <div class="controls-card" aria-label="Controles">
         <span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> Moverse</span>
-        <span><kbd>Espacio</kbd> Saltar</span>
+        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Moverse</span>
+        <span><kbd>Espacio</kbd> / <kbd>X</kbd> Atacar</span>
       </div>
     </header>
 
     <section class="game-frame" aria-label="Escenario del juego">
-      <canvas id="game" width="1536" height="1024" aria-label="Mapa jugable"></canvas>
+      <canvas id="game" width="1774" height="887" aria-label="Mapa jugable"></canvas>
       <div id="loading" class="loading">Cargando la isla...</div>
     </section>
+
     <footer class="game-footer">
-      <span id="status">¡Explora la isla!</span>
-      <span class="hint">Consejo: puedes saltar para subir a las plataformas de piedra.</span>
+      <span id="status" aria-live="polite">¡Explora la isla!</span>
+      <span class="hint">Muévete por la hierba y el puente. Pulsa Espacio o X para atacar.</span>
     </footer>
   </main>
   <script src="script.js"></script>

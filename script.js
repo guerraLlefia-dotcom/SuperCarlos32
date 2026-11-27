@@ -1,8 +1,9 @@
 (() => {
   "use strict";
 
-  // El mapa y los sprites se dibujan en coordenadas originales de 1536 × 1024.
-  const WORLD = { width: 1536, height: 1024 };
+  // El mundo y el canvas usan las dimensiones originales del escenario.
+  // No existe salto, altura, gravedad ni plataformas elevadas.
+  const WORLD = { width: 1774, height: 887 };
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
   const status = document.getElementById("status");
@@ -14,73 +15,228 @@
   const spriteSheet = new Image();
   spriteSheet.src = "images/player/player.png";
 
-  // La hoja del protagonista está organizada en 9 columnas y 5 filas:
-  // fila 0 = inactivo, fila 1 = correr, fila 2 = saltar.
-  // En cada fila: 3 frames de frente, 3 de perfil y 3 de espaldas.
-  const SHEET = { columns: 9, rows: 5, idleRow: 0, runRow: 1, jumpRow: 2 };
+  // Spritesheet: 9 columnas (3 frames por orientación) × 5 filas.
+  // Orientaciones: frontal 0-2, lateral 3-5, espalda 6-8.
+  const SHEET = {
+    columns: 9,
+    rows: 5,
+    idleRow: 0,
+    runRow: 1,
+    attackRow: 2,
+    damageRow: 3,
+    celebrateRow: 4
+  };
 
   const player = {
-    x: 330,
-    y: 690,
-    width: 86,
-    height: 112,
-    radius: 17,
+    x: 420,
+    y: 420, // Punto de apoyo: centro de los pies sobre el suelo.
+    width: 112,
+    height: 132,
     direction: "front",
+    facingLeft: false,
     moving: false,
     frame: 0,
     frameTimer: 0,
-    jumpHeight: 0,
-    verticalSpeed: 0,
-    grounded: true,
-    platformHeight: 0,
-    speed: 245
+    speed: 235,
+    attacking: false,
+    attackTimer: 0,
+    attackDuration: 0.48,
+    attackCooldown: 0
   };
 
   const keys = new Set();
-  const directions = {
-    front: 0,
-    side: 3,
-    "side-left": 3,
-    back: 6
-  };
+  const directionColumns = { front: 0, side: 3, back: 6 };
 
-  // Superficies transitables: las dos islas y el puente.
+  // Límites interiores de las zonas de hierba. El puente conecta ambas
+  // islas; el agua y los bordes rocosos quedan fuera de estas áreas.
   const walkableAreas = [
-    [[91,150],[185,137],[472,143],[515,181],[644,190],[681,246],[681,729],[650,795],[594,824],[153,818],[94,775],[78,690],[78,250]],
-    [[883,202],[923,166],[1110,137],[1378,151],[1448,205],[1462,715],[1430,775],[1376,817],[946,815],[891,773],[872,700]],
-    [[665,421],[887,421],[891,539],[665,539]]
+    [
+      [48, 290], [76, 224], [128, 179], [244, 161], [294, 91],
+      [350, 43], [426, 43], [487, 105], [579, 137], [656, 174],
+      [713, 228], [774, 290], [796, 357], [774, 424], [721, 492],
+      [735, 584], [784, 665], [752, 701], [692, 733], [610, 749],
+      [527, 733], [442, 748], [355, 728], [267, 741], [185, 710],
+      [126, 665], [78, 599], [43, 505]
+    ],
+    [
+      [978, 330], [1008, 275], [1056, 213], [1125, 185], [1205, 178],
+      [1291, 137], [1368, 65], [1457, 52], [1528, 83], [1595, 139],
+      [1668, 194], [1708, 267], [1725, 365], [1705, 464], [1677, 570],
+      [1701, 654], [1652, 704], [1578, 739], [1491, 747], [1405, 728],
+      [1317, 744], [1226, 730], [1140, 748], [1060, 715],
+      [1017, 667], [1035, 603], [984, 526], [970, 438]
+    ],
+    // Superficie transitable del puente.
+    [[770, 330], [1000, 330], [1000, 424], [770, 424]]
   ];
 
-  // Agua de la laguna: no se puede caminar ni saltar por encima.
-  const lake = [[1071,419],[1111,410],[1145,419],[1171,405],[1216,411],[1240,425],[1280,423],[1310,446],[1332,481],[1356,493],[1364,541],[1347,566],[1321,578],[1317,626],[1285,654],[1245,668],[1194,682],[1140,671],[1102,681],[1072,661],[1041,641],[1016,616],[984,606],[967,577],[973,532],[988,501],[1026,481],[1054,455]];
-
-  // Zonas elevadas. La altura es visual y permite caminar sobre la superficie
-  // de los tocones después de saltar hasta ellos.
-  const platforms = [
-    { x: 365, y: 231, rx: 105, ry: 49, height: 66 },
-    { x: 260, y: 378, rx: 82, ry: 39, height: 54 },
-    { x: 455, y: 478, rx: 78, ry: 35, height: 46 },
-    { x: 258, y: 570, rx: 82, ry: 38, height: 48 }
+  const FOOTPRINT_RADIUS = 10;
+  const FOOTPRINT_SAMPLES = [
+    [0, 0], [FOOTPRINT_RADIUS, 0], [-FOOTPRINT_RADIUS, 0],
+    [0, FOOTPRINT_RADIUS], [0, -FOOTPRINT_RADIUS],
+    [7, 7], [-7, 7], [7, -7], [-7, -7]
   ];
 
-  // Volúmenes sólidos de las piedras y de la cueva.
-  const obstacles = [
-    { polygon: [[237,244],[482,244],[507,292],[481,367],[444,386],[267,380],[226,340]], platform: 0, depth: 382 },
-    { polygon: [[171,396],[348,396],[365,451],[347,486],[199,492],[164,459]], platform: 1, depth: 493 },
-    { polygon: [[365,473],[548,473],[553,523],[525,565],[388,565],[360,530]], platform: 2, depth: 568 },
-    { polygon: [[169,573],[350,573],[359,619],[336,652],[197,652],[166,621]], platform: 3, depth: 654 },
-    { polygon: [[1095,184],[1328,184],[1348,247],[1328,343],[1289,365],[1135,365],[1093,328],[1084,249]], depth: 366 }
-  ];
+  // La nueva hoja está organizada en celdas fijas de 170 × 205 px.
+  // Nunca recortamos el dibujo: cada frame usa su celda completa.
+  let spriteFrames = [];
+  let spriteScale = 1;
+  let cellWidth = 0;
+  let cellHeight = 0;
 
-  // Máscaras de las caras delanteras. Se vuelven a dibujar por encima del
-  // jugador cuando este se encuentra detrás del objeto, creando profundidad.
-  const foregroundMasks = [
-    { depth: 382, polygon: [[238,258],[482,258],[481,367],[444,386],[267,380],[226,340]] },
-    { depth: 493, polygon: [[171,398],[348,398],[365,451],[347,486],[199,492],[164,459]] },
-    { depth: 568, polygon: [[365,474],[548,474],[553,523],[525,565],[388,565],[360,530]] },
-    { depth: 654, polygon: [[169,574],[350,574],[359,619],[336,652],[197,652],[166,621]] },
-    { depth: 366, polygon: [[1095,244],[1328,244],[1348,328],[1328,355],[1289,365],[1135,365],[1093,328]] }
-  ];
+  function findCellFootAnchor(imageData, imageWidth, left, top, width, height) {
+    // Algunos frames contienen píxeles sueltos debajo de los zapatos.
+    // Buscamos el componente conectado más grande para identificar el cuerpo
+    // del personaje e ignorar esos restos y efectos aislados.
+    const visited = new Uint8Array(width * height);
+    const queue = new Int32Array(width * height);
+    let bestArea = 0;
+    let bestBottom = -1;
+    let bestFootLeft = width;
+    let bestFootRight = -1;
+
+    for (let startY = 0; startY < height; startY++) {
+      for (let startX = 0; startX < width; startX++) {
+        const startIndex = startY * width + startX;
+        if (visited[startIndex]) continue;
+
+        const alpha = imageData[
+          ((top + startY) * imageWidth + left + startX) * 4 + 3
+        ];
+        if (alpha <= 8) {
+          visited[startIndex] = 1;
+          continue;
+        }
+
+        let head = 0;
+        let tail = 0;
+        let area = 0;
+        let componentBottom = -1;
+        let footLeft = width;
+        let footRight = -1;
+
+        queue[tail++] = startIndex;
+        visited[startIndex] = 1;
+
+        while (head < tail) {
+          const index = queue[head++];
+          const x = index % width;
+          const y = Math.floor(index / width);
+          area++;
+
+          if (y > componentBottom) {
+            componentBottom = y;
+            footLeft = x;
+            footRight = x;
+          } else if (y >= componentBottom - 2) {
+            footLeft = Math.min(footLeft, x);
+            footRight = Math.max(footRight, x);
+          }
+
+          for (let oy = -1; oy <= 1; oy++) {
+            for (let ox = -1; ox <= 1; ox++) {
+              if (ox === 0 && oy === 0) continue;
+              const nx = x + ox;
+              const ny = y + oy;
+              if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+
+              const nextIndex = ny * width + nx;
+              if (visited[nextIndex]) continue;
+              visited[nextIndex] = 1;
+
+              const nextAlpha = imageData[
+                ((top + ny) * imageWidth + left + nx) * 4 + 3
+              ];
+              if (nextAlpha > 8) queue[tail++] = nextIndex;
+            }
+          }
+        }
+
+        if (area > bestArea) {
+          bestArea = area;
+          bestBottom = componentBottom;
+          bestFootLeft = footLeft;
+          bestFootRight = footRight;
+        }
+      }
+    }
+
+    if (bestBottom < 0) return { x: width / 2, y: height - 1 };
+
+    return {
+      x: (bestFootLeft + bestFootRight) / 2,
+      y: bestBottom
+    };
+  }
+  function prepareSpriteFrames() {
+    const frameCanvas = document.createElement("canvas");
+    frameCanvas.width = spriteSheet.naturalWidth;
+    frameCanvas.height = spriteSheet.naturalHeight;
+    const frameCtx = frameCanvas.getContext("2d", { willReadFrequently: true });
+    frameCtx.drawImage(spriteSheet, 0, 0);
+
+    cellWidth = spriteSheet.naturalWidth / SHEET.columns;
+    cellHeight = spriteSheet.naturalHeight / SHEET.rows;
+
+    if (!Number.isInteger(cellWidth) || !Number.isInteger(cellHeight)) {
+      throw new Error("El spritesheet debe dividirse exactamente en 9 columnas y 5 filas.");
+    }
+
+    const pixels = frameCtx.getImageData(
+      0, 0, frameCanvas.width, frameCanvas.height
+    ).data;
+
+    spriteFrames = [];
+
+    for (let row = 0; row < SHEET.rows; row++) {
+      for (let col = 0; col < SHEET.columns; col++) {
+        const left = col * cellWidth;
+        const top = row * cellHeight;
+        const anchor = findCellFootAnchor(
+          pixels, frameCanvas.width, left, top, cellWidth, cellHeight
+        );
+
+        spriteFrames.push({
+          x: left,
+          y: top,
+          width: cellWidth,
+          height: cellHeight,
+          anchorX: anchor.x,
+          anchorY: anchor.y
+        });
+      }
+    }
+
+    // En la animación de caminar, algunas poses levantan un pie y la
+    // caja del personaje queda más alta dentro de su celda. Alineamos los
+    // tres fotogramas de cada orientación con la misma línea de suelo.
+    // Esto evita que el sprite suba y baje al avanzar la animación.
+    const walkRowStart = SHEET.runRow * SHEET.columns;
+    for (const firstColumn of [0, 3]) {
+      const walkFrames = [0, 1, 2].map(offset =>
+        spriteFrames[walkRowStart + firstColumn + offset]
+      );
+      const sharedGroundY = Math.max(...walkFrames.map(frame => frame.anchorY));
+      walkFrames.forEach(frame => {
+        frame.anchorY = sharedGroundY;
+      });
+
+      // Los sprites laterales ya están centrados visualmente dentro de
+      // sus celdas. No debemos recalcular X desde la anchura de los pies:
+      // su separación cambia entre poses y provoca un salto lateral aparente.
+      if (firstColumn === 3) {
+        walkFrames.forEach(frame => {
+          frame.anchorX = cellWidth / 2;
+        });
+      }
+    }
+
+    // Una escala única para todas las celdas, sin ajustes por fotograma.
+    spriteScale = Math.min(
+      player.width / cellWidth,
+      player.height / cellHeight
+    );
+  }
 
   let lastTime = 0;
   let mapReady = false;
@@ -89,7 +245,8 @@
   function pointInPolygon(x, y, polygon) {
     let inside = false;
     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-      const a = polygon[i], b = polygon[j];
+      const a = polygon[i];
+      const b = polygon[j];
       const crosses = ((a[1] > y) !== (b[1] > y)) &&
         (x < (b[0] - a[0]) * (y - a[1]) / ((b[1] - a[1]) || 0.00001) + a[0]);
       if (crosses) inside = !inside;
@@ -97,183 +254,122 @@
     return inside;
   }
 
-  function inEllipse(x, y, p) {
-    return ((x - p.x) ** 2) / (p.rx ** 2) + ((y - p.y) ** 2) / (p.ry ** 2) <= 1;
-  }
-
-  function platformAt(x, y) {
-    return platforms.find(p => inEllipse(x, y, p)) || null;
-  }
-
-  function isWalkable(x, y) {
-    return walkableAreas.some(poly => pointInPolygon(x, y, poly));
-  }
-
-  // La sombra representa la huella del jugador en el suelo. Todas las
-  // colisiones se calculan desde este punto, nunca desde el sprite dibujado.
-  const FOOTPRINT_RADIUS = 12;
-  const FOOTPRINT_SAMPLES = [
-    [0, 0], [FOOTPRINT_RADIUS, 0], [-FOOTPRINT_RADIUS, 0],
-    [0, FOOTPRINT_RADIUS], [0, -FOOTPRINT_RADIUS],
-    [8, 8], [-8, 8], [8, -8], [-8, -8]
-  ];
-
-  function footprintTouchesPolygon(x, y, polygon) {
-    return FOOTPRINT_SAMPLES.some(([ox, oy]) => pointInPolygon(x + ox, y + oy, polygon));
-  }
-
-  function collidesWithSolid(x, y, jumpHeight = player.jumpHeight, platformHeight = player.platformHeight) {
-    // El lago siempre es infranqueable: el salto no permite cruzarlo.
-    if (footprintTouchesPolygon(x, y, lake)) return true;
-
-    for (const obstacle of obstacles) {
-      if (!footprintTouchesPolygon(x, y, obstacle.polygon)) continue;
-
-      const platform = obstacle.platform === undefined ? null : platforms[obstacle.platform];
-      if (!platform) return true;
-
-      const shadowOnTop = inEllipse(x, y, platform);
-      const alreadyOnTop = platformHeight >= platform.height - 3 && shadowOnTop;
-      // Para subir, la sombra debe estar dentro de la superficie y el
-      // personaje debe haber alcanzado físicamente la altura de esa piedra.
-      const jumpingHighEnough = jumpHeight >= platform.height && shadowOnTop;
-      if (!alreadyOnTop && !jumpingHighEnough) return true;
-    }
-    return false;
-  }
-
   function canStandAt(x, y) {
-    if (!isWalkable(x, y)) return false;
-    return !collidesWithSolid(x, y);
+    // Se comprueba toda la huella para impedir que los pies queden sobre
+    // el agua o fuera de la isla, no solo el punto central.
+    return FOOTPRINT_SAMPLES.every(([ox, oy]) =>
+      walkableAreas.some(area => pointInPolygon(x + ox, y + oy, area))
+    );
   }
 
   function getFrameColumn() {
-    const base = directions[player.direction];
-    return base + (player.frame % 3);
+    return directionColumns[player.direction] + (player.frame % 3);
   }
 
   function drawPlayer() {
-    const groundY = player.y;
-    const renderY = groundY - player.jumpHeight - player.platformHeight;
-    const drawX = player.x - player.width / 2;
-    const drawY = renderY - player.height;
+    if (!spriteReady) return;
 
-    // Sombra: permanece pegada al suelo incluso durante el salto.
+    const row = player.attacking ? SHEET.attackRow :
+      (player.moving ? SHEET.runRow : SHEET.idleRow);
+    const column = getFrameColumn();
+    const frame = spriteFrames[row * SHEET.columns + column];
+    if (!frame) return;
+
+    // Se dibuja la celda COMPLETA (170 × 205), nunca un recorte variable.
+    // El apoyo inferior detectado dentro de la celda se alinea con player.x/y.
+    const drawWidth = cellWidth * spriteScale;
+    const drawHeight = cellHeight * spriteScale;
+    const drawX = player.x - frame.anchorX * spriteScale;
+    const drawY = player.y - frame.anchorY * spriteScale;
+
     ctx.save();
-    ctx.globalAlpha = Math.max(0.18, 0.42 - player.jumpHeight / 330);
-    ctx.fillStyle = "#102d42";
+    ctx.fillStyle = "rgba(12, 39, 54, 0.32)";
     ctx.beginPath();
-    // Esta elipse es el punto de apoyo real del personaje en el mapa.
-    ctx.ellipse(player.x, groundY, 23, 10, 0, 0, Math.PI * 2);
+    ctx.ellipse(player.x, player.y - 3, 25, 9, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = Math.max(0.22, 0.55 - player.jumpHeight / 300);
-    ctx.strokeStyle = "#d7f4ff";
-    ctx.lineWidth = 2;
-    ctx.stroke();
     ctx.restore();
 
-    if (spriteReady) {
-      const cellW = spriteSheet.naturalWidth / SHEET.columns;
-      const cellH = spriteSheet.naturalHeight / SHEET.rows;
-      const row = player.jumpHeight > 4 ? SHEET.jumpRow : (player.moving ? SHEET.runRow : SHEET.idleRow);
-      const sx = getFrameColumn() * cellW;
-      const sy = row * cellH;
-
-      ctx.save();
-      if (player.direction === "side-left") {
-        ctx.translate(player.x * 2, 0);
-        ctx.scale(-1, 1);
-      }
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(spriteSheet, sx, sy, cellW, cellH, drawX, drawY, player.width, player.height);
-      ctx.restore();
-    } else {
-      // Sustituto provisional mientras termina de cargar el spritesheet.
-      ctx.fillStyle = "#e52e35";
-      ctx.fillRect(player.x - 19, renderY - 76, 38, 42);
-      ctx.fillStyle = "#f3c59b";
-      ctx.fillRect(player.x - 22, renderY - 105, 44, 35);
-      ctx.fillStyle = "#a51d28";
-      ctx.fillRect(player.x - 24, renderY - 111, 48, 15);
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(player.x - 14, renderY - 91, 7, 9);
-      ctx.fillRect(player.x + 7, renderY - 91, 7, 9);
-      ctx.fillStyle = "#6b432d";
-      ctx.fillRect(player.x - 19, renderY - 35, 16, 27);
-      ctx.fillRect(player.x + 3, renderY - 35, 16, 27);
+    ctx.save();
+    if (player.direction === "side" && player.facingLeft) {
+      ctx.translate(player.x * 2, 0);
+      ctx.scale(-1, 1);
     }
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      spriteSheet,
+      frame.x, frame.y, frame.width, frame.height,
+      drawX, drawY, drawWidth, drawHeight
+    );
+    ctx.restore();
   }
 
-  function drawForegroundMask(mask) {
-    ctx.save();
-    ctx.beginPath();
-    mask.polygon.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
-    ctx.closePath();
-    ctx.clip();
-    ctx.drawImage(map, 0, 0, WORLD.width, WORLD.height);
-    ctx.restore();
+  function startAttack() {
+    if (player.attacking || player.attackCooldown > 0) return;
+
+    player.attacking = true;
+    player.moving = false;
+    player.attackTimer = 0;
+    player.frame = 0;
+    player.frameTimer = 0;
+    player.attackCooldown = player.attackDuration;
+    status.textContent = "¡Ataque con martillo!";
   }
 
   function update(dt) {
-    let dx = 0, dy = 0;
+    player.attackCooldown = Math.max(0, player.attackCooldown - dt);
+
+    if (player.attacking) {
+      player.attackTimer += dt;
+      const progress = player.attackTimer / player.attackDuration;
+      player.frame = Math.min(2, Math.floor(progress * 3));
+
+      if (player.attackTimer >= player.attackDuration) {
+        player.attacking = false;
+        player.attackTimer = 0;
+        player.frame = 0;
+        status.textContent = "¡Sigue explorando!";
+      }
+    }
+
+    let dx = 0;
+    let dy = 0;
     if (keys.has("ArrowLeft") || keys.has("KeyA")) dx -= 1;
     if (keys.has("ArrowRight") || keys.has("KeyD")) dx += 1;
     if (keys.has("ArrowUp") || keys.has("KeyW")) dy -= 1;
     if (keys.has("ArrowDown") || keys.has("KeyS")) dy += 1;
 
     const length = Math.hypot(dx, dy);
-    player.moving = length > 0;
+    player.moving = length > 0 && !player.attacking;
 
-    if (length) {
-      dx /= length; dy /= length;
-      if (Math.abs(dx) > Math.abs(dy)) player.direction = dx < 0 ? "side-left" : "side";
-      else player.direction = dy < 0 ? "back" : "front";
+    if (length > 0) {
+      dx /= length;
+      dy /= length;
 
-      const stepX = dx * player.speed * dt;
-      const stepY = dy * player.speed * dt;
-      const nextX = player.x + stepX;
-      const nextY = player.y + stepY;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        player.direction = "side";
+        player.facingLeft = dx < 0;
+      } else {
+        player.direction = dy < 0 ? "back" : "front";
+      }
 
-      // Comprobación por ejes para deslizarse junto a los obstáculos.
-      // La sombra se desplaza primero en X y después en Y. Así se puede
-      // rozar una pared y deslizarse por ella sin que el cuerpo del sprite
-      // provoque colisiones falsas.
-      if (canStandAt(nextX, player.y)) player.x = nextX;
-      if (canStandAt(player.x, nextY)) player.y = nextY;
-    }
+      if (!player.attacking) {
+        const nextX = player.x + dx * player.speed * dt;
+        const nextY = player.y + dy * player.speed * dt;
 
-    // Física vertical: espacio para saltar y gravedad para aterrizar.
-    const currentPlatform = platformAt(player.x, player.y);
-    const targetHeight = currentPlatform ? currentPlatform.height : 0;
-
-    if (player.jumpHeight > 0 || player.verticalSpeed > 0) {
-      player.jumpHeight += player.verticalSpeed * dt;
-      player.verticalSpeed -= 1050 * dt;
-
-      if (player.jumpHeight <= 0) {
-        player.jumpHeight = 0;
-        player.verticalSpeed = 0;
-        player.grounded = true;
+        // Colisión por ejes: permite deslizarse junto a los bordes
+        // y cruzar el puente sin atravesar el agua.
+        if (canStandAt(nextX, player.y)) player.x = nextX;
+        if (canStandAt(player.x, nextY)) player.y = nextY;
       }
     }
 
-    if (player.jumpHeight === 0) {
-      if (currentPlatform && player.platformHeight < currentPlatform.height) {
-        // Solo aterriza arriba si la trayectoria alcanzó la altura de la piedra.
-        // La validación de altura ocurre durante el salto, usando la sombra.
-        player.platformHeight = currentPlatform.height;
-      } else if (!currentPlatform) {
-        player.platformHeight = Math.max(0, player.platformHeight - 220 * dt);
-      }
-    }
-
-    if (player.moving) {
+    if (!player.attacking && player.moving) {
       player.frameTimer += dt;
       if (player.frameTimer >= 0.13) {
         player.frame = (player.frame + 1) % 3;
-        player.frameTimer = 0;
+        player.frameTimer -= 0.13;
       }
-    } else {
+    } else if (!player.attacking) {
       player.frame = 0;
       player.frameTimer = 0;
     }
@@ -284,15 +380,7 @@
     ctx.clearRect(0, 0, WORLD.width, WORLD.height);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(map, 0, 0, WORLD.width, WORLD.height);
-
-    // Máscaras de objetos que quedan por delante del personaje según su
-    // profundidad. Si el jugador está delante, se dibujan antes que él.
-    const behind = foregroundMasks.filter(mask => player.y < mask.depth);
-    const inFront = foregroundMasks.filter(mask => player.y >= mask.depth);
-
-    behind.forEach(drawForegroundMask);
     drawPlayer();
-    inFront.forEach(drawForegroundMask);
   }
 
   function loop(timestamp) {
@@ -305,14 +393,14 @@
 
   document.addEventListener("keydown", event => {
     const key = event.code;
-    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(key)) event.preventDefault();
-    keys.add(key);
-
-    if (key === "Space" && player.jumpHeight === 0 && player.verticalSpeed === 0) {
-      player.verticalSpeed = 455;
-      player.grounded = false;
-      status.textContent = "¡Salto!";
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(key)) {
+      event.preventDefault();
     }
+
+    if (!keys.has(key) && (key === "Space" || key === "KeyX")) {
+      startAttack();
+    }
+    keys.add(key);
   });
 
   document.addEventListener("keyup", event => keys.delete(event.code));
@@ -323,11 +411,13 @@
     loading.classList.add("hidden");
     requestAnimationFrame(loop);
   };
+
   map.onerror = () => {
     loading.textContent = "No se pudo cargar images/stages/stage 1.png";
   };
-  spriteSheet.onload = () => { spriteReady = true; };
+
+  spriteSheet.onload = () => { prepareSpriteFrames(); spriteReady = true; };
   spriteSheet.onerror = () => {
-    status.textContent = "No se pudo cargar el sprite del jugador; se muestra un personaje provisional.";
+    status.textContent = "No se pudo cargar el sprite del jugador.";
   };
 })();

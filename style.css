@@ -20,7 +20,7 @@ body {
     linear-gradient(160deg, #102d58, #071a37 70%);
 }
 
-.game-shell { width: min(1180px, 100%); margin: 0 auto; }
+.game-shell { width: min(1600px, 100%); margin: 0 auto; }
 
 .game-header {
   display: flex;
@@ -103,6 +103,8 @@ kbd {
   background: #238fe9;
   font: 12px 'Press Start 2P', monospace;
   line-height: 1.8;
+  text-align: center;
+  padding: 20px;
 }
 
 .loading.hidden { display: none; }
