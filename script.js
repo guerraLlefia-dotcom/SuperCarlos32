@@ -69,9 +69,9 @@
   const keys = new Set();
   const directionColumns = { front: 0, side: 3, back: 6 };
 
-  const coins = LEVEL.coinPositions.map(([x,y]) => ({x,y,collected:false,animation:null,radius:25,dropped:false}));
-  const goal = {x:LEVEL.goalPosition[0],y:LEVEL.goalPosition[1],animation:null,radius:38};
-  const monkeys = LEVEL.monkeys.map((p,index) => ({
+  let coins = LEVEL.coinPositions.map(([x,y]) => ({x,y,collected:false,animation:null,radius:25,dropped:false}));
+  let goal = {x:LEVEL.goalPosition[0],y:LEVEL.goalPosition[1],animation:null,radius:38};
+  let monkeys = LEVEL.monkeys.map((p,index) => ({
     id:index,x:p.x,y:p.y,homeX:p.x,homeY:p.y,patrolRadius:p.radius,angle:index*1.7,
     state:"patrol",direction:"front",flipX:false,speed:122,detectRadius:255,contactRadius:39,
     animation:null,hitPlayerCooldown:0,attackHit:false,defeatedTimer:0,coinDropped:false
@@ -87,6 +87,8 @@
   let stageOutroTimer = 0;
   let transitionPhase = "none";
   let spritesReady = false;
+  let trees = [];
+  let rocks = [];
 
   function setStatus(message) {
     status.textContent = message;
@@ -187,8 +189,8 @@
         setStatus("Monedas: " + collectedCoins + " / " + coins.length);
       }
     }
-    goal.animation?.update(dt);
-    if (!victory && Math.hypot(player.x - goal.x, player.y - goal.y) < 58) {
+    goal?.animation?.update(dt);
+    if (goal && !victory && Math.hypot(player.x - goal.x, player.y - goal.y) < 58) {
       beginStageVictory();
     }
   }
@@ -223,10 +225,18 @@
   }
   function drawWorldObjects() {
     if (!spritesReady) return;
+    for (const tree of trees) {
+      tree.animation.draw(ctx, tree.x - tree.width / 2, tree.y - tree.height, tree.width, tree.height);
+    }
+    for (const rock of rocks) {
+      if (rock.state !== "destroyed") {
+        rock.animation.draw(ctx, rock.x - rock.width / 2, rock.y - rock.height, rock.width, rock.height);
+      }
+    }
     for (const coin of coins) {
       if (!coin.collected) coin.animation.draw(ctx, coin.x - 41, coin.y - 41, 82, 82);
     }
-    goal.animation.draw(ctx, goal.x - 53, goal.y - 53, 106, 106);
+    if (goal) goal.animation.draw(ctx, goal.x - 53, goal.y - 53, 106, 106);
     for (const monkey of monkeys) {
       if (monkey.state !== "defeated" || !monkey.animation.isFinished) {
         monkey.animation.draw(ctx, monkey.x - 44, monkey.y - 47, 88, 94, {flipX:monkey.flipX});
@@ -252,7 +262,7 @@
 
   // Límites interiores de las zonas de hierba. El puente conecta ambas
   // islas; el agua y los bordes rocosos quedan fuera de estas áreas.
-  const walkableAreas = [
+  let walkableAreas = [
     [
       [48, 290], [76, 224], [128, 179], [244, 161], [294, 91],
       [350, 43], [426, 43], [487, 105], [579, 137], [656, 174],
@@ -272,6 +282,127 @@
     // Superficie transitable del puente.
     [[770, 330], [1000, 330], [1000, 424], [770, 424]]
   ];
+
+  const STAGE_CONFIGS = {
+    1: {
+      map: "images/stages/stage%201.png",
+      playerStart: LEVEL.playerStart,
+      coinPositions: LEVEL.coinPositions,
+      goalPosition: LEVEL.goalPosition,
+      monkeys: LEVEL.monkeys,
+      trees: [],
+      rocks: [],
+      walkableAreas
+    },
+    2: {
+      map: "images/stages/stage%202.png",
+      // Inicio al oeste del lago, con espacio libre alrededor del jugador.
+      playerStart: [365, 435],
+      coinPositions: [],
+      goalPosition: null,
+      monkeys: [],
+      trees: [
+        [350, 145], [585, 145], [1260, 145], [1510, 250],
+        [255, 660], [520, 720], [1255, 720], [1535, 625]
+      ],
+      rocks: [
+        [475, 315], [1160, 320], [390, 520],
+        [1380, 520], [820, 125], [1010, 750]
+      ],
+      // Zonas de tierra transitables: parte superior, inferior y laterales
+      // rodeando el lago, además del puente central.
+      walkableAreas: [
+        [
+          [190, 250], [185, 165], [285, 75], [415, 35], [545, 70],
+          [650, 120], [740, 165], [835, 170], [930, 145], [1035, 105],
+          [1150, 90], [1290, 105], [1450, 145], [1590, 190], [1675, 250],
+          [1700, 305], [1600, 340], [1500, 315], [1370, 292], [1250, 295],
+          [1140, 330], [1050, 350], [990, 340], [950, 305], [900, 255],
+          [840, 225], [760, 210], [700, 240], [660, 290], [620, 330],
+          [520, 330], [420, 315], [310, 350], [230, 330]
+        ],
+        [
+          [570, 520], [650, 570], [720, 640], [800, 690], [900, 720],
+          [1000, 710], [1100, 680], [1200, 680], [1300, 700], [1400, 760],
+          [1520, 780], [1630, 730], [1700, 650], [1720, 560], [1680, 490],
+          [1600, 455], [1500, 440], [1370, 435], [1230, 430], [1110, 435],
+          [1020, 450], [970, 480], [930, 540], [900, 590], [840, 620],
+          [780, 610], [720, 570], [660, 540], [600, 510]
+        ],
+        [
+          [30, 270], [80, 210], [160, 175], [245, 230], [300, 300],
+          [340, 370], [360, 435], [330, 510], [280, 590], [200, 680],
+          [120, 690], [60, 625], [25, 540], [20, 420]
+        ],
+        [
+          [1440, 260], [1520, 230], [1600, 240], [1680, 300],
+          [1720, 380], [1725, 480], [1680, 570], [1610, 600],
+          [1550, 540], [1510, 470], [1490, 390], [1440, 330]
+        ],
+        [[735, 345], [970, 345], [970, 435], [735, 435]]
+      ]
+    }
+  };
+
+  let activeLevelConfig = STAGE_CONFIGS[1];
+
+  function configureLevelEntities(config) {
+    activeLevelConfig = config;
+    walkableAreas = config.walkableAreas;
+    coins = config.coinPositions.map(([x, y]) => ({
+      x, y, collected: false, animation: GameSprites.create("coin", "spin"),
+      radius: 25, dropped: false
+    }));
+    goal = config.goalPosition ? {
+      x: config.goalPosition[0], y: config.goalPosition[1],
+      animation: GameSprites.create("star", "idle"), radius: 38
+    } : null;
+    monkeys = config.monkeys.map((p, index) => ({
+      id: index, x: p.x, y: p.y, homeX: p.x, homeY: p.y,
+      patrolRadius: p.radius, angle: index * 1.7, state: "patrol",
+      direction: "front", flipX: false, speed: 122, detectRadius: 255,
+      contactRadius: 39, animation: GameSprites.create("monkey", "walkFront"),
+      hitPlayerCooldown: 0, attackHit: false, defeatedTimer: 0, coinDropped: false
+    }));
+    trees = config.trees.map(([x, y]) => ({
+      x, y, width: 124, height: 126, radius: 23,
+      animation: GameSprites.create("tree", "idle")
+    }));
+    rocks = config.rocks.map(([x, y]) => ({
+      x, y, width: 78, height: 72, radius: 27,
+      state: "intact", animation: GameSprites.create("rock", "idle")
+    }));
+  }
+
+  function updateRocks(dt) {
+    for (const rock of rocks) {
+      if (rock.state !== "breaking") continue;
+      rock.animation.update(dt);
+      if (rock.animation.isFinished) {
+        rock.state = "destroyed";
+        setStatus("¡Roca destruida! Ya puedes pasar.");
+      }
+    }
+  }
+
+  function attackHitsRock() {
+    if (!player.attacking) return;
+    for (const rock of rocks) {
+      if (rock.state !== "intact") continue;
+      const dx = rock.x - player.x;
+      const dy = rock.y - player.y;
+      if (Math.hypot(dx, dy) > 112) continue;
+      let inFront = false;
+      if (player.direction === "front") inFront = dy >= -12 && Math.abs(dx) < 82;
+      else if (player.direction === "back") inFront = dy <= 12 && Math.abs(dx) < 82;
+      else inFront = player.facingLeft ? dx <= 15 : dx >= -15;
+      if (!inFront) continue;
+      rock.state = "breaking";
+      rock.animation.setAnimation("destroy", true);
+      setStatus("¡Has golpeado una roca!");
+      break;
+    }
+  }
 
   const FOOTPRINT_RADIUS = 10;
   const FOOTPRINT_SAMPLES = [
@@ -458,11 +589,23 @@
   }
 
   function canStandAt(x, y) {
-    // Se comprueba toda la huella para impedir que los pies queden sobre
-    // el agua o fuera de la isla, no solo el punto central.
-    return FOOTPRINT_SAMPLES.every(([ox, oy]) =>
+    // Se comprueba la huella sobre tierra y se bloquean árboles y rocas
+    // tanto para el jugador como para cualquier enemigo que use esta función.
+    const insideLand = FOOTPRINT_SAMPLES.every(([ox, oy]) =>
       walkableAreas.some(area => pointInPolygon(x + ox, y + oy, area))
     );
+    if (!insideLand) return false;
+
+    const blockedByTree = trees.some(tree =>
+      Math.hypot(x - tree.x, y - (tree.y - 20)) < tree.radius + FOOTPRINT_RADIUS
+    );
+    if (blockedByTree) return false;
+
+    const blockedByRock = rocks.some(rock =>
+      rock.state !== "destroyed" &&
+      Math.hypot(x - rock.x, y - rock.y) < rock.radius + FOOTPRINT_RADIUS
+    );
+    return !blockedByRock;
   }
 
   function getFrameColumn() {
@@ -523,9 +666,12 @@
   function update(dt) {
     if (gameOver) return;
     if (stageIntroTimer > 0) {
+      stageIntroTimer = Math.max(0, stageIntroTimer - dt);
       coins.forEach(coin => coin.animation?.update(dt));
-      goal.animation?.update(dt);
+      goal?.animation?.update(dt);
       monkeys.forEach(monkey => monkey.animation?.update(dt));
+      updateRocks(dt);
+      if (stageIntroTimer === 0) transitionPhase = "none";
       return;
     }
     if (victory) {
@@ -541,6 +687,7 @@
       return;
     }
     damageCooldown = Math.max(0, damageCooldown - dt);
+    updateRocks(dt);
     if (player.damageTimer > 0) {
       player.damageTimer = Math.max(0, player.damageTimer - dt);
       const damping = Math.pow(0.06, dt);
@@ -617,6 +764,7 @@
       player.frameTimer = 0;
     }
 
+    attackHitsRock();
     updateCoinsAndGoal(dt);
     monkeys.forEach(monkey => updateMonkey(monkey, dt));
   }
@@ -628,14 +776,20 @@
       return;
     }
 
-    currentStage++;
+    const nextStage = currentStage + 1;
+    if (!STAGE_CONFIGS[nextStage]) {
+      setStatus("¡Has completado todos los stages configurados!");
+      return;
+    }
+    currentStage = nextStage;
     mapReady = false;
     loading.textContent = "Cargando stage " + currentStage + "...";
     loading.classList.remove("hidden");
     map.onload = () => {
       mapReady = true;
-      player.x = LEVEL.playerStart[0];
-      player.y = LEVEL.playerStart[1];
+      configureLevelEntities(STAGE_CONFIGS[currentStage]);
+      player.x = activeLevelConfig.playerStart[0];
+      player.y = activeLevelConfig.playerStart[1];
       player.direction = "front";
       player.frame = 0;
       player.frameTimer = 0;
@@ -645,17 +799,7 @@
       player.knockbackX = 0;
       player.knockbackY = 0;
       collectedCoins = 0;
-      coins.splice(0, coins.length, ...LEVEL.coinPositions.map(([x,y]) => ({
-        x, y, collected: false, animation: GameSprites.create("coin", "spin"), radius: 25, dropped: false
-      })));
-      goal.x = LEVEL.goalPosition[0];
-      goal.y = LEVEL.goalPosition[1];
-      monkeys.forEach(monkey => {
-        monkey.x=monkey.homeX; monkey.y=monkey.homeY; monkey.angle=0;
-        monkey.state="patrol"; monkey.direction="front"; monkey.flipX=false;
-        monkey.attackHit=false; monkey.hitPlayerCooldown=0; monkey.coinDropped=false;
-        monkey.animation.setAnimation("walkFront",true);
-      });
+      rocks.forEach(rock => { rock.state = "intact"; rock.animation.setAnimation("idle", true); });
       victory = false;
       victoryTimer = 0;
       transitionPhase = "intro";
@@ -672,7 +816,7 @@
       setStatus("Error al cargar el siguiente stage.");
       stageTransitioning = false;
     };
-    map.src = "images/stages/stage%20" + currentStage + ".png";
+    map.src = STAGE_CONFIGS[currentStage].map;
   }
 
   function render() {
@@ -758,9 +902,7 @@
   }
 
   GameSprites.ready.then(() => {
-    coins.forEach(coin => { coin.animation = GameSprites.create("coin", "spin"); });
-    goal.animation = GameSprites.create("star", "idle");
-    monkeys.forEach(monkey => { monkey.animation = GameSprites.create("monkey", "walkFront"); });
+    configureLevelEntities(STAGE_CONFIGS[1]);
     spritesReady = true;
     tryStartGame();
   }).catch(error => {
