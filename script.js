@@ -28,6 +28,24 @@
     celebrateRow: 4
   };
 
+  // Objetos y enemigos del primer nivel.
+  const LEVEL = {
+    // Primera isla: jugador en el centro-izquierda y dos monos junto al puente.
+    // Segunda isla: estrella centrada y tres monos patrullando a su alrededor.
+    playerStart: [420, 420],
+    coinPositions: [
+      [230, 245], [520, 190], [675, 345], [300, 555],
+      [570, 665], [1160, 245], [1450, 310], [1550, 620]
+    ],
+    goalPosition: [1365, 420],
+    monkeys: [
+      { x: 690, y: 325, radius: 46 },
+      { x: 690, y: 425, radius: 46 },
+      { x: 1245, y: 345, radius: 48 },
+      { x: 1480, y: 345, radius: 48 },
+      { x: 1365, y: 535, radius: 48 }
+    ]
+  };
   const player = {
     x: LEVEL.playerStart[0],
     y: LEVEL.playerStart[1], // Punto de apoyo: centro de los pies sobre el suelo.
@@ -51,24 +69,6 @@
   const keys = new Set();
   const directionColumns = { front: 0, side: 3, back: 6 };
 
-  // Objetos y enemigos del primer nivel.
-  const LEVEL = {
-    // Primera isla: jugador en el centro-izquierda y dos monos junto al puente.
-    // Segunda isla: estrella centrada y tres monos patrullando a su alrededor.
-    playerStart: [420, 420],
-    coinPositions: [
-      [230, 245], [520, 190], [675, 345], [300, 555],
-      [570, 665], [1160, 245], [1450, 310], [1550, 620]
-    ],
-    goalPosition: [1365, 420],
-    monkeys: [
-      { x: 690, y: 325, radius: 46 },
-      { x: 690, y: 425, radius: 46 },
-      { x: 1245, y: 345, radius: 48 },
-      { x: 1480, y: 345, radius: 48 },
-      { x: 1365, y: 535, radius: 48 }
-    ]
-  };
   const coins = LEVEL.coinPositions.map(([x,y]) => ({x,y,collected:false,animation:null,radius:25}));
   const goal = {x:LEVEL.goalPosition[0],y:LEVEL.goalPosition[1],animation:null,radius:38};
   const monkeys = LEVEL.monkeys.map((p,index) => ({
