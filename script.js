@@ -42,7 +42,10 @@
     attacking: false,
     attackTimer: 0,
     attackDuration: 0.48,
-    attackCooldown: 0
+    attackCooldown: 0,
+    damageTimer: 0,
+    knockbackX: 0,
+    knockbackY: 0
   };
 
   const keys = new Set();
@@ -77,6 +80,7 @@
   let playerHealth = 3;
   let damageCooldown = 0;
   let victory = false;
+  let gameOver = false;
   let victoryTimer = 0;
   let stageTransitioning = false;
   let spritesReady = false;
@@ -129,6 +133,20 @@
       monkey.attackHit = true;
       startMonkeyDefeat();
     }
+  }
+
+  function receivePlayerDamage(sourceX, sourceY) {
+    const dx = player.x - sourceX;
+    const dy = player.y - sourceY;
+    const distance = Math.hypot(dx, dy) || 1;
+    player.knockbackX = (dx / distance) * 390;
+    player.knockbackY = (dy / distance) * 390;
+    player.damageTimer = 0.58;
+    player.attacking = false;
+    player.attackTimer = 0;
+    player.moving = false;
+    player.frame = 0;
+    player.frameTimer = 0;
   }
 
   function beginStageVictory() {
@@ -204,15 +222,15 @@
       playerHealth = Math.max(0, playerHealth - 1);
       damageCooldown = 1.25;
       monkey.hitPlayerCooldown = 1.25;
-      player.frame = 0;
-      player.frameTimer = 0;
+      receivePlayerDamage(monkey.x, monkey.y);
       setStatus(playerHealth > 0
         ? "¡El mono te ha golpeado! Vidas: " + playerHealth
         : "¡Te has quedado sin vidas! Recarga el nivel para intentarlo de nuevo.");
       if (playerHealth <= 0) {
-        victory = true;
+        gameOver = true;
         player.moving = false;
         player.attacking = false;
+        player.damageTimer = 0;
       }
     }
 
@@ -233,7 +251,7 @@
     }
     goal.animation.draw(ctx, goal.x - 53, goal.y - 53, 106, 106);
     if (monkey.state !== "defeated" || !monkey.animation.isFinished) {
-      monkey.animation.draw(ctx, monkey.x - 61, monkey.y - 74, 122, 131, {
+      monkey.animation.draw(ctx, monkey.x - 52, monkey.y - 63, 104, 111, {
         flipX: monkey.flipX
       });
     }
@@ -477,8 +495,10 @@
   function drawPlayer() {
     if (!spriteReady) return;
 
-    const row = victory ? SHEET.celebrateRow : (player.attacking ? SHEET.attackRow :
-      (player.moving ? SHEET.runRow : SHEET.idleRow));
+    const row = victory ? SHEET.celebrateRow :
+      (player.damageTimer > 0 ? SHEET.damageRow :
+        (player.attacking ? SHEET.attackRow :
+          (player.moving ? SHEET.runRow : SHEET.idleRow)));
     const column = getFrameColumn();
     const frame = spriteFrames[row * SHEET.columns + column];
     if (!frame) return;
@@ -524,6 +544,7 @@
   }
 
   function update(dt) {
+    if (gameOver) return;
     if (victory) {
       victoryTimer += dt;
       player.frameTimer += dt;
@@ -536,6 +557,24 @@
       return;
     }
     damageCooldown = Math.max(0, damageCooldown - dt);
+    if (player.damageTimer > 0) {
+      player.damageTimer = Math.max(0, player.damageTimer - dt);
+      const damping = Math.pow(0.06, dt);
+      const moveX = player.knockbackX * dt;
+      const moveY = player.knockbackY * dt;
+      if (canStandAt(player.x + moveX, player.y)) player.x += moveX;
+      if (canStandAt(player.x, player.y + moveY)) player.y += moveY;
+      player.knockbackX *= damping;
+      player.knockbackY *= damping;
+      player.frameTimer += dt;
+      if (player.frameTimer >= 0.13) {
+        player.frame = (player.frame + 1) % 3;
+        player.frameTimer -= 0.13;
+      }
+      updateCoinsAndGoal(dt);
+      updateMonkey(dt);
+      return;
+    }
     player.attackCooldown = Math.max(0, player.attackCooldown - dt);
 
     if (player.attacking) {
@@ -617,6 +656,10 @@
       player.frame = 0;
       player.frameTimer = 0;
       playerHealth = 3;
+      gameOver = false;
+      player.damageTimer = 0;
+      player.knockbackX = 0;
+      player.knockbackY = 0;
       collectedCoins = 0;
       coins.forEach(coin => { coin.collected = false; });
       goal.x = LEVEL.goalPosition[0];
@@ -656,6 +699,19 @@
     drawWorldObjects();
     drawPlayer();
     drawHud();
+    if (gameOver) {
+      ctx.save();
+      ctx.fillStyle = "rgba(12, 20, 35, 0.72)";
+      ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "bold 58px Nunito, sans-serif";
+      ctx.fillText("¡SIN VIDAS!", WORLD.width / 2, WORLD.height / 2 - 18);
+      ctx.font = "bold 25px Nunito, sans-serif";
+      ctx.fillText("Recarga el nivel para volver a intentarlo", WORLD.width / 2, WORLD.height / 2 + 42);
+      ctx.restore();
+    }
   }
 
   function loop(timestamp) {
