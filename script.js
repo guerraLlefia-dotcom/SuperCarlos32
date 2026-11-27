@@ -203,6 +203,13 @@
       }
     }
 
+    // Cambia entre las animaciones de caminar según la orientación actual.
+    // setAnimation no reinicia el clip si ya está reproduciéndose.
+    const desiredAnimation = enemyWalkAnimation();
+    if (monkey.animation.animationName !== desiredAnimation) {
+      monkey.animation.setAnimation(desiredAnimation);
+    }
+
     attackHitsMonkey();
   }
 
