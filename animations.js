@@ -14,6 +14,13 @@
         idle: { row: 0, start: 0, frames: 5, frameDuration: 0.14, loop: true }
       }
     },
+    rock: {
+      src: "images/items/rock.png", columns: 5, rows: 1,
+      animations: {
+        idle: { row: 0, start: 0, frames: 1, frameDuration: 1, loop: true },
+        destroy: { row: 0, start: 1, frames: 4, frameDuration: 0.14, loop: false }
+      }
+    },
     monkey: {
       src: "images/enemies/monkey.png", columns: 6, rows: 3,
       animations: {
