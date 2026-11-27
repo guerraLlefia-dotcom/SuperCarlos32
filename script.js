@@ -111,21 +111,21 @@
   function attackHitsMonkey() {
     if (!player.attacking) return;
     for (const monkey of monkeys) {
-    if (monkey.state === "defeated" || monkey.attackHit) continue;
-    const dx = monkey.x - player.x;
-    const dy = monkey.y - player.y;
-    const distance = Math.hypot(dx, dy);
-    if (distance > 112) continue;
+      if (monkey.state === "defeated" || monkey.attackHit) continue;
+      const dx = monkey.x - player.x;
+      const dy = monkey.y - player.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance > 112) continue;
 
-    let inFront = false;
-    if (player.direction === "front") inFront = dy >= -12 && Math.abs(dx) < 82;
-    else if (player.direction === "back") inFront = dy <= 12 && Math.abs(dx) < 82;
-    else inFront = player.facingLeft ? dx <= 15 : dx >= -15;
+      let inFront = false;
+      if (player.direction === "front") inFront = dy >= -12 && Math.abs(dx) < 82;
+      else if (player.direction === "back") inFront = dy <= 12 && Math.abs(dx) < 82;
+      else inFront = player.facingLeft ? dx <= 15 : dx >= -15;
 
-    if (inFront) {
-      monkey.attackHit = true;
-      startMonkeyDefeat(monkey);
-    }
+      if (inFront) {
+        monkey.attackHit = true;
+        startMonkeyDefeat(monkey);
+      }
     }
   }
 
@@ -626,7 +626,8 @@
         monkey.attackHit=false; monkey.hitPlayerCooldown=0;
         monkey.animation.setAnimation("walkFront",true);
       });
-      victory = false;      victoryTimer = 0;
+      victory = false;
+      victoryTimer = 0;
       stageTransitioning = false;
       // Los límites y la distribución de objetos de los siguientes mapas
       // se definirán durante el diseño específico de cada stage.
